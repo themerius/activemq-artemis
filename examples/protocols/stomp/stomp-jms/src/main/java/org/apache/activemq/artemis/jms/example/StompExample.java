@@ -16,6 +16,10 @@
  */
 package org.apache.activemq.artemis.jms.example;
 
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.Date;
+
 import javax.jms.Connection;
 import javax.jms.MessageConsumer;
 import javax.jms.MessageProducer;
@@ -37,29 +41,39 @@ public class StompExample {
       factory.setTopicPrefix("jms.topic.");
       factory.setBrokerURI("tcp://localhost:61616");
       Connection connection = factory.createConnection();
-      Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+      connection.start();
+
+      final Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
       Queue queue = session.createQueue("queue1");
-      MessageProducer producer = session.createProducer(queue);
+      final MessageProducer producer = session.createProducer(queue);
+      MessageConsumer consumer = session.createConsumer(queue);
 
       producer.send(session.createTextMessage("Hello"));
 
-      connection.start();
 
-
-      System.out.println("Waiting 20 seconds");
+      System.out.println("Waiting 10 seconds");
       Thread.sleep(10000); // increase this and it will fail
       System.out.println("waited");
 
-      MessageConsumer consumer = session.createConsumer(queue);
-
-      TextMessage message = (TextMessage) consumer.receive(5000);
-
-      System.out.println("The content of the message is " + message.getText());
-
-      if (!message.getText().equals("Hello")) {
-         throw new IllegalStateException("the content of the message was different than expected!");
+      // send message all second.
+      if (System.getProperty("traffic") != null) {
+          Timer timer = new Timer();
+          timer.schedule( new TimerTask() {
+              public void run() {
+                  try {
+                      producer.send(session.createTextMessage("Hello from Timer @ " + new Date()));
+                  } catch (Exception e) {
+                      System.out.println("Oops");
+                  }
+              }
+          }, 0, 1000);
       }
 
-      connection.close();
+      // block until messages arrive.
+      // every time a message arrives, process it
+      while (true) {
+        TextMessage message = (TextMessage) consumer.receive();
+        System.out.println("The content of the message is " + message.getText());
+      }
    }
 }
